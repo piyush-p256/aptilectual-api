@@ -1,7 +1,7 @@
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 from django.utils import timezone
 from django.db.models import Count, Q, Min
 from .models import CustomUser, Problem, UserAnswer, LeaderDaily
@@ -9,6 +9,7 @@ from .serializers import CustomUserSerializer, ProblemSerializer, UserAnswerSeri
 from rest_framework.permissions import IsAuthenticated
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+
 
 @method_decorator(csrf_exempt, name='dispatch')
 class RegisterView(generics.CreateAPIView):
@@ -24,6 +25,14 @@ class LoginView(APIView):
             login(request, user)
             return Response(status=status.HTTP_200_OK)
         return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        logout(request)
+        return Response({"message": "Successfully logged out"}, status=status.HTTP_200_OK)
 
 class ProfileView(generics.RetrieveAPIView):
     queryset = CustomUser.objects.all()
