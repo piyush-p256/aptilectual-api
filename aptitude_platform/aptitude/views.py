@@ -46,7 +46,7 @@ class DailyProblemsView(generics.ListAPIView):
 
     def get_queryset(self):
         now = timezone.localtime(timezone.now())
-        start_time = now.replace(hour=17, minute=0, second=0, microsecond=0)
+        start_time = now.replace(hour=1, minute=0, second=0, microsecond=0)
         end_time = now.replace(hour=18, minute=0, second=0, microsecond=0)
 
         print(f"Current time: {now}")
@@ -62,6 +62,7 @@ class DailyProblemsView(generics.ListAPIView):
             print("Outside time window")
             return Problem.objects.none()
 
+
 class SubmitAnswerView(generics.CreateAPIView):
     serializer_class = UserAnswerSerializer
     permission_classes = [IsAuthenticated]
@@ -70,27 +71,32 @@ class SubmitAnswerView(generics.CreateAPIView):
         user = self.request.user
         problem = serializer.validated_data['problem']
         selected_option = serializer.validated_data['selected_option']
+        solution_image_url = serializer.validated_data.get('solution_image_url', '')
+
+        # Convert current time to the local timezone
+        now = timezone.localtime(timezone.now())
+        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_time = now.replace(hour=18, minute=0, second=0, microsecond=0)
 
         # Check if the current time is within the allowed time window
-        now = timezone.now()
-        start_time = now.replace(hour=17, minute=0, second=0, microsecond=0)
-        end_time = now.replace(hour=21, minute=0, second=0, microsecond=0)
-
         if not (start_time <= now <= end_time):
-            return Response({"error": "Submission is not allowed at this time."}, status=status.HTTP_403_FORBIDDEN)
+            raise ValueError("Submission is not allowed at this time.")
 
         # Check if the user has already submitted an answer for this problem
         if UserAnswer.objects.filter(user=user, problem=problem).exists():
-            return Response({"error": "You have already submitted an answer for this problem."}, status=status.HTTP_403_FORBIDDEN)
+            raise ValueError("You have already submitted an answer for this problem.")
 
+        # Determine if the answer is correct
         is_correct = problem.correct_option == selected_option
 
+        # Update user stats
         user.total_attempted += 1
         if is_correct:
             user.total_correct += 1
 
+        # Update streak
         last_submission = UserAnswer.objects.filter(user=user).order_by('-time_solved').first()
-        if last_submission and last_submission.time_solved.date() == timezone.now().date() - timezone.timedelta(days=1):
+        if last_submission and last_submission.time_solved.date() == (timezone.localtime(timezone.now()).date() - timezone.timedelta(days=1)):
             user.current_streak += 1
         else:
             user.current_streak = 1
@@ -99,16 +105,19 @@ class SubmitAnswerView(generics.CreateAPIView):
             user.highest_streak = user.current_streak
 
         user.save()
-        serializer.save(user=user, is_correct=is_correct)
+
+        # Save the UserAnswer instance
+        serializer.save(user=user, is_correct=is_correct, solution_image_url=solution_image_url)
 
     def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        if response.status_code == status.HTTP_201_CREATED:
-            return response
-        return Response(response.data, status=response.status_code)
-
-
-
+        try:
+            response = super().create(request, *args, **kwargs)
+            if response.status_code == status.HTTP_201_CREATED:
+                return response
+            return Response(response.data, status=response.status_code)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+        
 
 
 class DailyLeaderboardView(generics.ListAPIView):

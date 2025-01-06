@@ -35,6 +35,7 @@ class ProblemSerializer(serializers.ModelSerializer):
 
 class UserAnswerSerializer(serializers.ModelSerializer):
     problem = serializers.PrimaryKeyRelatedField(queryset=Problem.objects.all())
+    solution_image_url = serializers.URLField(required=False, allow_blank=True)
 
     class Meta:
         model = UserAnswer
@@ -43,5 +44,5 @@ class UserAnswerSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = self.context['request'].user
-        validated_data.pop('user', None)  # 'user' is not in validated_data
+        validated_data.pop('user', None)  # Ensure 'user' is not in validated_data
         return UserAnswer.objects.create(user=user, **validated_data)
